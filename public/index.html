@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8" />
+  <title>HomeAccess Schedule Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <style>
+    /* Reset & base */
+*, *::before, *::after {
+  box-sizing: border-box;
+  box-shadow: none !important; /* Remove all box shadows */
+}
+body, html {
+  margin: 0;
+  height: 100%;
+  background: #e4e9f0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  color: #1f2937;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+main {
+  background: white;
+  border-radius: 18px;
+  width: calc(100vw - 40px);
+  height: calc(100vh - 40px);
+  max-width: 600px;
+  max-height: 800px;
+  padding: 2.5rem 2.5rem 3rem;
+  /* box-shadow removed */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  opacity: 0;
+  transform: translateY(40px);
+  animation: fadeSlideIn 0.6s ease forwards;
+  transition: background-color 0.4s ease;
+}
+
+@keyframes fadeSlideIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+h1 {
+  font-weight: 700;
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  color: #00427c;
+  text-align: center;
+  user-select: none;
+  flex-shrink: 0;
+  transition: color 0.3s ease;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  flex-shrink: 0;
+  animation: fadeSlideUp 0.5s ease forwards;
+}
+
+form:not(:first-of-type) {
+  margin-top: 1.5rem;
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+label {
+  font-weight: 600;
+  color: #222;
+  font-size: 0.95rem;
+  user-select: none;
+  transition: color 0.3s ease;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="date"] {
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border-radius: 10px;
+  border: 1.8px solid #d1d5db;
+  transition:
+    border-color 0.3s ease,
+    background-color 0.3s ease,
+    color 0.3s ease;
+  outline-offset: 3px;
+  outline-color: transparent;
+  width: 100%;
+  max-width: 100%;
+  background: white;
+  color: #111827;
+}
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="date"]:focus {
+  border-color: #00427c;
+  outline-color: #00427c;
+  outline-style: solid;
+  background: white;
+  color: #111827;
+}
+
+button {
+  background: #00427c;
+  color: white;
+  font-weight: 700;
+  border: none;
+  padding: 1.1rem;
+  border-radius: 12px;
+  font-size: 1.15rem;
+  cursor: pointer;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
+  user-select: none;
+  width: 100%;
+  max-width: 100%;
+}
+button:hover:not(:disabled) {
+  background: #0059b8;
+  transform: translateY(-2px);
+}
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+button:disabled {
+  background: #a0aec0;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.message {
+  margin-top: 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  user-select: none;
+  min-height: 2.2em;
+  transition: color 0.3s ease, background-color 0.3s ease;
+  border-radius: 10px;
+  padding: 0.5rem 1rem;
+  box-sizing: border-box;
+  opacity: 0;
+  animation: messageFadeIn 0.4s forwards;
+  flex-shrink: 0;
+}
+@keyframes messageFadeIn {
+  to {opacity: 1;}
+}
+.message.error {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+.message.success {
+  color: #065f46;
+  background: #d1fae5;
+}
+.message.loading {
+  color: #2563eb;
+  font-style: italic;
+  background: #dbebff;
+}
+
+/* Schedule table container */
+.schedule-wrapper {
+  margin-top: 2rem;
+  overflow-x: auto;
+  flex-grow: 1;
+  animation: fadeSlideUp 0.6s ease forwards;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #00427c44 transparent;
+  display: none; /* Hide by default */
+  user-select: none;
+  border-radius: 12px;
+  background: white;
+  /* no box-shadow */
+}
+.schedule-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+.schedule-wrapper::-webkit-scrollbar-thumb {
+  background: #00427c88;
+  border-radius: 4px;
+}
+.schedule-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 480px;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+}
+thead th {
+  background-color: #00427c;
+  color: white;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  user-select: none;
+}
+tbody td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: #111827;
+}
+tbody tr:nth-child(even) td {
+  background: #f9fafb;
+}
+
+/* Mobile and smaller screen tweaks */
+@media (max-width: 600px) {
+  main {
+    max-width: 100vw;
+    max-height: 100vh;
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    padding: 1.8rem 1.2rem 1.8rem;
+    display: flex;
+    flex-direction: column;
+  }
+  h1 {
+    font-size: 1.75rem;
+    margin-bottom: 1.2rem;
+  }
+  form {
+    gap: 1rem;
+    width: 100%;
+    max-width: 100%;
+  }
+  input[type="date"],
+  button {
+    height: 48px;
+    font-size: 1.1rem;
+    padding: 0 1rem;
+  }
+  /* Hide the big table on mobile */
+  .schedule-wrapper {
+    display: none !important;
+  }
+  /* Show schedule cards on mobile */
+  .schedule-cards {
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-top: 1.5rem;
+    animation: fadeSlideUp 0.6s ease forwards;
+    display: none; /* Hide initially */
+    flex-direction: column;
+    gap: 1rem;
+    -webkit-overflow-scrolling: touch;
+    user-select: none;
+    border-radius: 12px;
+    background: transparent;
+    padding: 0;
+    border: none;
+  }
+  .schedule-card {
+    background: #f3f4f6;
+    border-radius: 12px;
+    border: 1px solid #d1d5db;
+    padding: 1rem 1.25rem;
+    font-size: 1rem;
+    color: #111827;
+    user-select: none;
+  }
+  .schedule-card div {
+    margin-bottom: 0.4rem;
+  }
+  .schedule-card div span.label {
+    font-weight: 700;
+    color: #00427c;
+    margin-right: 0.5rem;
+  }
+}
+
+/* === DARK MODE === */
+@media (prefers-color-scheme: dark) {
+  body, html {
+    background: #121212;
+    color: #e0e0e0;
+  }
+  main {
+    background: #1e1e1e;
+  }
+  h1 {
+    color: #71a6ff;
+  }
+  label {
+    color: #ddd;
+  }
+  input[type="text"],
+  input[type="password"],
+  input[type="date"] {
+    background: #2a2a2a;
+    border: 1.8px solid #444;
+    color: #e0e0e0;
+  }
+  input[type="text"]:focus,
+  input[type="password"]:focus,
+  input[type="date"]:focus {
+    border-color: #71a6ff;
+    outline-color: #71a6ff;
+    background: #2a2a2a;
+    color: #e0e0e0;
+  }
+  button {
+    background: #1a4bc9;
+  }
+  button:hover:not(:disabled) {
+    background: #2e62ff;
+  }
+  button:disabled {
+    background: #555a6e;
+  }
+  .message.error {
+    color: #fca5a5;
+    background: #3c1f1f;
+  }
+  .message.success {
+    color: #34d399;
+    background: #14372f;
+  }
+  .message.loading {
+    color: #60a5fa;
+    background: #1e2a44;
+  }
+  thead th {
+    background-color: #2a47a0;
+    color: #e0e0e0;
+  }
+  tbody td {
+    color: #ccc;
+    border-color: #444;
+  }
+  tbody tr:nth-child(even) td {
+    background: #2a2a2a;
+  }
+  /* Mobile cards dark */
+  .schedule-cards {
+    background: #1e1e1e;
+    border-color: #444;
+  }
+  .schedule-card {
+    background: #2a2a2a;
+    border-color: #555;
+    color: #e0e0e0;
+  }
+  .schedule-card div span.label {
+    color: #71a6ff;
+  }
+}
+  </style>
+</head>
+<body>
+  <main role="main" aria-label="HomeAccess Schedule viewer app">
+    <h1>HomeAccess Schedule Viewer</h1>
+
+    <form id="loginForm" autocomplete="off" aria-label="Login form">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required placeholder="Your username" />
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Your password" />
+
+      <button id="loginBtn" type="submit">Log in</button>
+    </form>
+
+    <form id="scheduleForm" style="display:none" aria-label="Schedule fetch form">
+      <label for="dateInput">Select the first day of school</label>
+      <input id="dateInput" name="date" type="date" required />
+
+      <button id="fetchBtn" type="submit">Get Schedule</button>
+    </form>
+
+    <div id="message" class="message" role="alert" aria-live="polite"></div>
+
+    <!-- Desktop/tablet schedule table -->
+    <div class="schedule-wrapper" aria-label="Schedule Table Container">
+      <table id="scheduleTable" aria-label="Student schedule">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Course</th>
+            <th>Description</th>
+            <th>Teacher</th>
+            <th>Room</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Mobile schedule cards container -->
+    <div class="schedule-cards" aria-label="Student schedule cards" style="display:none;"></div>
+  </main>
+
+<script>
+  const loginForm = document.getElementById('loginForm');
+  const scheduleForm = document.getElementById('scheduleForm');
+  const messageEl = document.getElementById('message');
+  const scheduleWrapper = document.querySelector('.schedule-wrapper');
+  const scheduleTableBody = document.querySelector('#scheduleTable tbody');
+  const scheduleCardsContainer = document.querySelector('.schedule-cards');
+  const dateInput = document.getElementById('dateInput');
+
+  let savedCredentials = null;
+
+  // Set default date to today (local)
+  function setToday() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    dateInput.value = now.toISOString().slice(0,10);
+  }
+  setToday();
+
+  function showMessage(text = '', type = '') {
+    messageEl.textContent = text;
+    messageEl.className = 'message';
+    if(type) messageEl.classList.add(type);
+    if(!text) {
+      scheduleWrapper.style.display = 'none';
+      scheduleCardsContainer.style.display = 'none';
+    }
+  }
+
+  function isMobile() {
+    return window.matchMedia('(max-width: 600px)').matches;
+  }
+
+  loginForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    showMessage('Logging in...', 'loading');
+
+    const username = loginForm.username.value.trim();
+    const password = loginForm.password.value;
+
+    if(!username || !password) {
+      showMessage('Please enter both username and password.', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+      });
+      const data = await res.json();
+
+      if(!res.ok) {
+        showMessage(data.error || 'Login failed. Check your credentials.', 'error');
+        return;
+      }
+
+      savedCredentials = { username, password };
+      loginForm.style.display = 'none';
+      scheduleForm.style.display = 'flex';
+      showMessage('Login successful! Select a date and fetch your schedule.', 'success');
+
+    } catch (err) {
+      showMessage('Network error. Please try again.', 'error');
+    }
+  });
+
+  scheduleForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    showMessage('Fetching schedule...', 'loading');
+    scheduleTableBody.innerHTML = '';
+    scheduleCardsContainer.innerHTML = '';
+    scheduleWrapper.style.display = 'none';
+    scheduleCardsContainer.style.display = 'none';
+
+    const date = dateInput.value;
+    if(!date) {
+      showMessage('Please select a date.', 'error');
+      return;
+    }
+
+    try {
+      // Try fetching schedule
+      let response = await fetch('/schedule', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ date })
+      });
+      let data = await response.json();
+
+      // Auto re-login on session expired
+      if(data.error === 'Not logged in' && savedCredentials) {
+        await fetch('/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(savedCredentials)
+        });
+        response = await fetch('/schedule', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ date })
+        });
+        data = await response.json();
+      }
+
+      if(data.error) {
+        showMessage(data.error, 'error');
+        return;
+      }
+
+      if(!data.schedule || data.schedule.length === 0) {
+        showMessage('No schedule found for this date.', 'error');
+        return;
+      }
+
+      if(isMobile()) {
+        // Show cards for mobile
+        scheduleCardsContainer.style.display = 'flex';
+        data.schedule.forEach(row => {
+          const card = document.createElement('div');
+          card.className = 'schedule-card';
+          card.innerHTML = `
+            <div><span class="label">Period:</span> ${row.period}</div>
+            <div><span class="label">Course:</span> ${row.course}</div>
+            <div><span class="label">Description:</span> ${row.description}</div>
+            <div><span class="label">Teacher:</span> ${row.teacher}</div>
+            <div><span class="label">Room:</span> ${row.room}</div>
+          `;
+          scheduleCardsContainer.appendChild(card);
+        });
+        showMessage(`Schedule for ${date}`, 'success');
+      } else {
+        // Show table for desktop
+        scheduleWrapper.style.display = 'block';
+        data.schedule.forEach(row => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.period}</td>
+            <td>${row.course}</td>
+            <td>${row.description}</td>
+            <td>${row.teacher}</td>
+            <td>${row.room}</td>
+          `;
+          scheduleTableBody.appendChild(tr);
+        });
+        showMessage(`Schedule for ${date}`, 'success');
+      }
+
+    } catch (err) {
+      showMessage('Failed to fetch schedule.', 'error');
+    }
+  });
+</script>
+</body>
+</html>

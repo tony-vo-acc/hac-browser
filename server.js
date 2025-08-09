@@ -1,11 +1,15 @@
-const express = require('express');
-const session = require('express-session');
-const tough = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
-const axios = require('axios').default;
-const cheerio = require('cheerio');
-const fs = require('fs/promises');
-const path = require('path');
+// server.js
+import express from 'express';
+import session from 'express-session';
+import { CookieJar } from 'tough-cookie';
+import { wrapper } from 'axios-cookiejar-support';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = 3000;
@@ -14,7 +18,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session store (in-memory for demo; replace with Redis in production)
+// Session config (in-memory, for demo)
 app.use(session({
   secret: 'some secret here',
   resave: false,
@@ -22,18 +26,14 @@ app.use(session({
   cookie: { maxAge: 3600000 }
 }));
 
-// Helper to pad dates
 const pad = (n) => n < 10 ? '0' + n : n;
 
-// Helper: create axios client from cookies in session
 function createAxiosWithCookies(req) {
   let jar;
   if (req.session.cookieJar) {
-    // Restore cookies from session
-    jar = tough.CookieJar.deserializeSync(req.session.cookieJar);
+    jar = CookieJar.deserializeSync(req.session.cookieJar);
   } else {
-    // New cookie jar if none exists
-    jar = new tough.CookieJar();
+    jar = new CookieJar();
   }
 
   const client = wrapper(axios.create({
@@ -45,34 +45,25 @@ function createAxiosWithCookies(req) {
   return { client, jar };
 }
 
-// LOGIN
-// LOGIN
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required' });
-  }
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
 
   try {
     const { client, jar } = createAxiosWithCookies(req);
 
-    // Step 1: Get login page to grab verification token
     const loginPageResp = await client.get('https://home-access.cfisd.net/HomeAccess/Account/LogOn');
     const $ = cheerio.load(loginPageResp.data);
     const token = $('input[name="__RequestVerificationToken"]').val();
-    if (!token) {
-      return res.status(500).json({ error: 'Failed to get login token' });
-    }
+    if (!token) return res.status(500).json({ error: 'Failed to get login token' });
 
-    // Step 2: Prepare form data
     const params = new URLSearchParams();
     params.append('__RequestVerificationToken', token);
     params.append('LogOnDetails.UserName', username);
     params.append('LogOnDetails.Password', password);
-    params.append('Database', 10); // could scrape this from the select box instead of hardcoding
+    params.append('Database', 10);
     params.append('VerificationOption', 'UsernamePassword');
 
-    // Step 3: Post login — allow manual redirect handling
     const loginResp = await client.post(
       'https://home-access.cfisd.net/HomeAccess/Account/LogOn?ReturnUrl=%2fHomeAccess%2f',
       params.toString(),
@@ -83,21 +74,14 @@ app.post('/login', async (req, res) => {
       }
     );
 
-    // Step 4: Handle login result
     let loginSuccess = false;
 
     if (loginResp.status === 302 && loginResp.headers.location.includes('/HomeAccess/')) {
-      // 302 redirect → success
       loginSuccess = true;
-
-      // Follow redirect to confirm we are in dashboard
       await client.get('https://home-access.cfisd.net' + loginResp.headers.location);
     } else {
-      // Not a redirect — check HTML for failure messages
       const html = loginResp.data;
       const $$ = cheerio.load(html);
-
-      // Look for known error elements/messages
       if ($$('span[id$="FailureText"]').length || /invalid|incorrect/i.test(html)) {
         loginSuccess = false;
       } else if ($$('#hac-StudentSummary').length || /Welcome/i.test(html)) {
@@ -105,16 +89,12 @@ app.post('/login', async (req, res) => {
       }
     }
 
-    if (!loginSuccess) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
+    if (!loginSuccess) return res.status(401).json({ error: 'Invalid username or password' });
 
-    // Step 5: Save cookies + username in session
     req.session.cookieJar = jar.serializeSync();
     req.session.username = username;
 
     res.json({ message: 'Login successful' });
-
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -130,7 +110,6 @@ app.post('/schedule', async (req, res) => {
   try {
     const { client, jar } = createAxiosWithCookies(req);
 
-    // Expect date as "YYYY-MM-DD" from <input type="date">
     const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
     if (!iso) return res.status(400).json({ error: 'Date must be YYYY-MM-DD' });
 
@@ -139,34 +118,29 @@ app.post('/schedule', async (req, res) => {
     const month = Number(monthStr);
     const day = Number(dayStr);
 
-    // Use pad() helper you already have
     const formattedDate = `${pad(month)}/${pad(day)}/${year}`;
 
     const studentId = req.session.username.startsWith('s') ? req.session.username.slice(1) : req.session.username;
     const scheduleUrl = `https://home-access.cfisd.net/HomeAccess/Content/Student/DailySchedule.aspx?student_id=${studentId}&ScheduleDate=${formattedDate}`;
-    console.log('[SCHEDULE] Fetching:', scheduleUrl);
 
     const schedulePage = await client.get(scheduleUrl);
     const $ = cheerio.load(schedulePage.data);
     const schedule = [];
 
-    $('#plnMain_dgSchedule tr.sg-asp-table-data-row, #plnMain_dgSchedule tr.sg-asp-table-data-row-alt')
-      .each((_, row) => {
-        const cells = $(row).find('td');
-        schedule.push({
-          period: $(cells[0]).text().trim(),
-          course: $(cells[1]).text().trim(),
-          description: $(cells[2]).text().trim(),
-          teacher: $(cells[3]).text().trim(),
-          room: $(cells[4]).text().trim(),
-        });
+    $('#plnMain_dgSchedule tr.sg-asp-table-data-row, #plnMain_dgSchedule tr.sg-asp-table-data-row-alt').each((_, row) => {
+      const cells = $(row).find('td');
+      schedule.push({
+        period: $(cells[0]).text().trim(),
+        course: $(cells[1]).text().trim(),
+        description: $(cells[2]).text().trim(),
+        teacher: $(cells[3]).text().trim(),
+        room: $(cells[4]).text().trim(),
       });
+    });
 
-    // Save cookies in case HAC refreshed them
     req.session.cookieJar = jar.serializeSync();
 
     res.json({ date: formattedDate, schedule });
-
   } catch (err) {
     console.error('Schedule fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch schedule' });
@@ -179,7 +153,6 @@ app.post('/logout', (req, res) => {
     res.json({ ok: true });
   });
 });
-
 
 app.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`);
